@@ -13,7 +13,7 @@
 <script>
 const TOOL_CONFIG = {
     name:    "Arbeitszeiterfassung Pro",
-    version: "1.6.3",
+    version: "1.6.4",
     emoji:   "⏱",
     storageKey: "az_pro_data_v2"
 };
@@ -429,6 +429,9 @@ footer .fv{background:var(--primary-soft);color:var(--primary);padding:2px 7px;b
   <div class="burger-divider"></div>
   <div class="burger-section">
     <div class="burger-section-title">Daten</div>
+    <button class="burger-item" onclick="closeBurger();openExportModal()">
+      <span class="bi-icon">📄</span> Monatsexport
+    </button>
     <button class="burger-item" onclick="closeBurger();exportCSV()">
       <span class="bi-icon">📊</span> CSV exportieren
     </button>
@@ -451,7 +454,7 @@ footer .fv{background:var(--primary-soft);color:var(--primary);padding:2px 7px;b
     </div>
   </div>
   <div style="padding:20px;margin-top:auto;font-size:.72rem;color:var(--text-muted);text-align:center">
-    ArbeitzeitPro v1.6.3 · by David Digital
+    ArbeitzeitPro v1.6.4 · by David Digital
   </div>
 </div>
 
@@ -619,6 +622,30 @@ footer .fv{background:var(--primary-soft);color:var(--primary);padding:2px 7px;b
       <button id="peDeleteBtn" class="btn-outline" style="color:var(--danger);border-color:var(--danger);margin-right:auto;display:none" onclick="deleteActiveProfile()">🗑 Löschen</button>
       <button onclick="closeModal('modal-profile-edit')" class="btn-outline">Abbrechen</button>
       <button onclick="saveProfileEdit()" class="btn-primary">💾 Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- MONATSEXPORT MODAL -->
+<div class="modal" id="modal-export" onclick="if(event.target===this)closeModal('modal-export')">
+  <div class="modal-box">
+    <button class="modal-close-btn" onclick="closeModal('modal-export')">✕</button>
+    <div class="modal-header"><h2>📄 Monatsexport</h2></div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Profil</label>
+        <div id="exportProfileName" style="font-weight:600;font-size:.95rem;padding:6px 0;color:var(--primary)"></div>
+      </div>
+      <div class="form-group">
+        <label>Monat</label>
+        <input type="month" id="exportMonth" onchange="updateExportPreview()" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:.95rem">
+      </div>
+      <div id="exportPreviewInfo" style="margin-top:8px;font-size:.83rem;color:var(--text-muted)"></div>
+    </div>
+    <div class="modal-footer" style="gap:10px">
+      <button onclick="closeModal('modal-export')" class="btn-outline">Abbrechen</button>
+      <button onclick="exportMonthCSV()" class="btn-outline" style="color:var(--primary);border-color:var(--primary)">📊 CSV</button>
+      <button onclick="exportMonthPDF()" class="btn-primary">🖨 PDF</button>
     </div>
   </div>
 </div>
@@ -1152,6 +1179,13 @@ function selectActiveProfile(id) {
   selectCategory(id);   // Formular-Selector mitziehen
   renderProfileRow();
   renderHeroChip();
+  // Per-Profil-State zurücksetzen (eigene Zeiterfassung / Dashboard)
+  viewWeekOffset = 0;
+  activeFilter = 'all';
+  filterSearch = '';
+  const si = document.getElementById('searchInput');
+  if (si) si.value = '';
+  render();
 }
 function renderProfileRow() {
   const el = document.getElementById('profileRow'); if (!el) return;
@@ -1878,6 +1912,158 @@ function deleteActiveProfile() {
   data.settings.categories = profiles;
   saveData(); closeModal('modal-profile-edit'); renderBurgerProfiles(); render();
   toast('Profil gelöscht', 'success');
+}
+
+// ══════════════════════════════════════════
+//  MONATSEXPORT
+// ══════════════════════════════════════════
+function openExportModal() {
+  const pid = activeProfileId();
+  const cat = getCategories().find(c => c.id === pid) || getCategories()[0];
+  document.getElementById('exportProfileName').textContent = cat ? `${cat.icon} ${cat.label}` : '—';
+  const now = new Date();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  document.getElementById('exportMonth').value = `${now.getFullYear()}-${mm}`;
+  updateExportPreview();
+  openModal('modal-export');
+}
+function updateExportPreview() {
+  const month = document.getElementById('exportMonth').value;
+  const info = document.getElementById('exportPreviewInfo');
+  if (!month || !info) return;
+  const pid = activeProfileId();
+  const entries = getMonthEntries(pid, month);
+  const totalMin = entries.reduce((s, e) => s + calcNetMin(e), 0);
+  info.textContent = `${entries.length} Einträge · ${fmtHM(totalMin)} netto`;
+}
+function getMonthEntries(pid, month) {
+  // month = "YYYY-MM"
+  return data.entries.filter(e =>
+    e.end &&
+    (e.category || 'job') === pid &&
+    e.date && e.date.startsWith(month)
+  ).sort((a, b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start));
+}
+function calcNetMin(e) {
+  if (!e.end) return 0;
+  const [sh, sm] = e.start.split(':').map(Number);
+  const [eh, em] = e.end.split(':').map(Number);
+  return Math.max(0, (eh * 60 + em) - (sh * 60 + sm) - (e.breakMin || 0));
+}
+function exportMonthCSV() {
+  const month = document.getElementById('exportMonth').value;
+  if (!month) { toast('Bitte Monat wählen', 'error'); return; }
+  const pid = activeProfileId();
+  const cat = getCategories().find(c => c.id === pid) || getCategories()[0];
+  const entries = getMonthEntries(pid, month);
+  const soll = cat ? (cat.sollMin || 0) : 0;
+  const DAYS_DE = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+  const rows = [
+    ['Datum', 'Tag', 'Beginn', 'Ende', 'Pause (min)', 'Netto (h)', 'Soll (h)', 'Saldo (h)', 'Notiz']
+  ];
+  let totalNet = 0, totalSaldo = 0;
+  entries.forEach(e => {
+    const netM = calcNetMin(e);
+    const saldoM = netM - soll;
+    totalNet += netM;
+    totalSaldo += saldoM;
+    const dt = new Date(e.date + 'T00:00:00');
+    rows.push([
+      e.date,
+      DAYS_DE[dt.getDay()],
+      e.start,
+      e.end,
+      e.breakMin || 0,
+      (netM / 60).toFixed(2),
+      (soll / 60).toFixed(2),
+      (saldoM / 60).toFixed(2),
+      `"${(e.note || '').replace(/"/g, '""')}"`
+    ]);
+  });
+  rows.push(['', '', '', '', '', (totalNet / 60).toFixed(2), '', (totalSaldo / 60).toFixed(2), '']);
+  const bom = '﻿';
+  const csv = bom + rows.map(r => r.join(';')).join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `Zeiterfassung_${month}_${(cat ? cat.label : 'Profil').replace(/\s+/g,'_')}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+  closeModal('modal-export');
+  toast('CSV exportiert ✓', 'success');
+}
+function exportMonthPDF() {
+  const month = document.getElementById('exportMonth').value;
+  if (!month) { toast('Bitte Monat wählen', 'error'); return; }
+  const pid = activeProfileId();
+  const html = buildMonthPrintHTML(pid, month);
+  const win = window.open('', '_blank');
+  if (!win) { toast('Popup blockiert – bitte erlauben', 'error'); return; }
+  win.document.write(html);
+  win.document.close();
+  win.onload = () => { win.focus(); win.print(); };
+  closeModal('modal-export');
+}
+function buildMonthPrintHTML(pid, month) {
+  const cat = getCategories().find(c => c.id === pid) || getCategories()[0];
+  const entries = getMonthEntries(pid, month);
+  const soll = cat ? (cat.sollMin || 0) : 0;
+  const DAYS_DE = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
+  const [y, m] = month.split('-');
+  const monthLabel = new Date(parseInt(y), parseInt(m) - 1, 1).toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
+  let totalNet = 0, totalSaldo = 0;
+  const rows = entries.map(e => {
+    const netM = calcNetMin(e);
+    const saldoM = netM - soll;
+    totalNet += netM;
+    totalSaldo += saldoM;
+    const dt = new Date(e.date + 'T00:00:00');
+    const saldoSign = saldoM >= 0 ? '+' : '';
+    return `<tr>
+      <td>${e.date}</td>
+      <td>${DAYS_DE[dt.getDay()]}</td>
+      <td>${e.start}</td>
+      <td>${e.end}</td>
+      <td style="text-align:center">${e.breakMin || 0}</td>
+      <td style="text-align:right;font-weight:600">${fmtHM(netM)}</td>
+      <td style="text-align:right;color:${saldoM >= 0 ? '#059669' : '#dc2626'}">${saldoSign}${fmtHM(Math.abs(saldoM))}${saldoM < 0 ? ' ▼' : ''}</td>
+      <td style="color:#6b7280;font-size:.82em">${e.note || ''}</td>
+    </tr>`;
+  }).join('');
+  const totalSaldoSign = totalSaldo >= 0 ? '+' : '';
+  return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8">
+<title>Zeiterfassung ${monthLabel} – ${cat ? cat.label : ''}</title>
+<style>
+  @page { size: A4 landscape; margin: 15mm 12mm; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 11px; color: #111; margin: 0 }
+  h1 { font-size: 18px; margin: 0 0 2px; color: #4f46e5 }
+  .meta { font-size: 11px; color: #6b7280; margin-bottom: 14px }
+  table { width: 100%; border-collapse: collapse }
+  th { background: #4f46e5; color: #fff; padding: 6px 8px; text-align: left; font-size: 11px }
+  td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb }
+  tr:nth-child(even) td { background: #f9fafb }
+  tfoot td { background: #f3f4f6; font-weight: 700; border-top: 2px solid #4f46e5 }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact } }
+</style></head><body>
+<h1>⏱ Zeiterfassung – ${monthLabel}</h1>
+<div class="meta">Profil: <strong>${cat ? cat.icon + ' ' + cat.label : '—'}</strong> &nbsp;·&nbsp; Sollzeit/Tag: <strong>${fmtHM(soll)}</strong> &nbsp;·&nbsp; Einträge: <strong>${entries.length}</strong></div>
+<table>
+  <thead><tr>
+    <th>Datum</th><th>Wochentag</th><th>Beginn</th><th>Ende</th>
+    <th style="text-align:center">Pause (min)</th>
+    <th style="text-align:right">Netto</th>
+    <th style="text-align:right">Saldo</th>
+    <th>Notiz</th>
+  </tr></thead>
+  <tbody>${rows || '<tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:16px">Keine Einträge in diesem Monat</td></tr>'}</tbody>
+  <tfoot><tr>
+    <td colspan="5">Gesamt (${entries.length} Tage)</td>
+    <td style="text-align:right">${fmtHM(totalNet)}</td>
+    <td style="text-align:right;color:${totalSaldo >= 0 ? '#059669' : '#dc2626'}">${totalSaldoSign}${fmtHM(Math.abs(totalSaldo))}</td>
+    <td></td>
+  </tr></tfoot>
+</table>
+<div style="margin-top:20px;font-size:10px;color:#9ca3af">Erstellt am ${new Date().toLocaleDateString('de-DE')} · ArbeitzeitPro ${TOOL_CONFIG.version}</div>
+</body></html>`;
 }
 
 // ══════════════════════════════════════════
