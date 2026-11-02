@@ -2399,7 +2399,8 @@ function updateVacPreview() {
   const cfg=VAC_TYPES[type]||VAC_TYPES['Urlaub'];
   prev.innerHTML=`${cfg.icon} <strong>${wd.length} Werktag${wd.length!==1?'e':''}</strong> (${cal} Kalendertag${cal!==1?'e':''})`;
   if (type==='Urlaub') {
-    const already=countVacDays('Urlaub',from.slice(0,4)),total=data.settings.urlaubstage||30,rem=total-already-wd.length;
+    const _vpc=getCategories().find(c=>c.id===activeProfileId());
+    const already=countVacDays('Urlaub',from.slice(0,4)),total=(_vpc&&_vpc.urlaubstage!=null)?_vpc.urlaubstage:(data.settings.urlaubstage||30),rem=total-already-wd.length;
     prev.innerHTML+=` &nbsp;·&nbsp; Resturlaub: <strong style="color:${rem<0?'var(--danger)':'var(--secondary)'}">${rem}</strong> von ${total} Tagen`;
   }
 }
@@ -2720,7 +2721,8 @@ function renderDashboard() {
 
   // Vacation KPIs
   const vacTypes=[{key:'Urlaub',color:cc.primary,icon:'🏖'},{key:'Krank',color:cc.danger,icon:'🤒'},{key:'Feiertag',color:cc.secondary,icon:'🎉'},{key:'Sonderurlaub',color:cc.accent,icon:'✨'}];
-  const ug=data.settings.urlaubstage||30,vc={};
+  const _dprofCat=getCategories().find(c=>c.id===_dpid);
+  const ug=(_dprofCat&&_dprofCat.urlaubstage!=null)?_dprofCat.urlaubstage:(data.settings.urlaubstage||30),vc={};
   vacTypes.forEach(t=>{vc[t.key]=countVacDays(t.key,yr);});
   const tvd=Object.values(vc).reduce((a,b)=>a+b,0);
 

@@ -472,7 +472,7 @@ footer .fv{background:var(--primary-soft);color:var(--primary);padding:2px 7px;b
     </div>
   </div>
   <div style="padding:20px;margin-top:auto;font-size:.72rem;color:var(--text-muted);text-align:center">
-    ArbeitzeitPro v1.6.7 · by David Digital
+    ArbeitzeitPro v<span id="menuFooterVer"></span> · by David Digital
   </div>
 </div>
 
@@ -998,7 +998,7 @@ footer .fv{background:var(--primary-soft);color:var(--primary);padding:2px 7px;b
           <div class="step-item"><div class="step-num">7</div><div class="step-text"><strong>Filter &amp; Suche</strong> — Die Filterleiste über der Tabelle enthält Chips für Büro, Telearbeit, Urlaub, Krank, Feiertag und Sonderurlaub sowie ein Freitextsuchfeld. Bei aktivem Filter wechselt die Ansicht zu einer zeitraumübergreifenden Liste aller passenden Einträge — ideal für Steuererklärungen.</div></div>
           <div class="step-item"><div class="step-num">8</div><div class="step-text"><strong>Dashboard</strong> — Tab „📊 Dashboard" mit 5 Chart.js-Diagrammen: Wochenstunden, Stundenkonto-Verlauf, Wochentag-Analyse, Monatsübersicht und Ø Pausenzeiten. Dazu Abwesenheitsstatistiken und Urlaubskonto.</div></div>
           <div class="step-item"><div class="step-num">9</div><div class="step-text"><strong>Auto-Refresh</strong> — Beide Tabs aktualisieren sich alle 15 Minuten automatisch. Countdown-Balken zeigt verbleibende Zeit (Blau → Amber → Rot). Jederzeit manuell per „↻ Aktualisieren".</div></div>
-          <div class="step-item"><div class="step-num">10</div><div class="step-text"><strong>Einstellungen</strong> — Sollzeit in h + min (z.B. 7 h 45 min), Arbeitstage/Woche und Jahresurlaubs-Kontingent unter „⚙ Einstellungen" im Header.</div></div>
+          <div class="step-item"><div class="step-num">10</div><div class="step-text"><strong>Profile &amp; Einstellungen</strong> — Sollzeit, Arbeitstage/Woche, Jahresurlaub und Stundenkonto-Startwert sind <em>per Profil</em> konfigurierbar — Profil-Icon im Header anklicken → Bearbeiten-Stift. Globale Einstellungen (App-Einstellungen) enthalten nur noch die Auto-Backup-Erinnerung.</div></div>
           <div class="step-item"><div class="step-num">11</div><div class="step-text"><strong>Export &amp; Import</strong> — „📊 CSV" exportiert alle Zeiteinträge für Excel. „💾 Backup" sichert alles (inkl. Abwesenheiten &amp; Einstellungen) als JSON. „📥 Import" liest CSV und JSON wieder ein — Duplikate werden automatisch erkannt.</div></div>
         </div>
       </div>
@@ -1034,7 +1034,7 @@ footer .fv{background:var(--primary-soft);color:var(--primary);padding:2px 7px;b
 
         <div class="help-card">
           <h3>⚖ Stundenkonto</h3>
-          <p>Täglicher Saldo (Ist − Soll) und kumulierter Gesamt-Saldo. Grün = Überstunden, Rot = Minusstunden. Abwesenheiten und Wochenenden zählen neutral.</p>
+          <p>Tabelle: Spalte <strong>+/−</strong> = täglicher Saldo (Ist − Soll); Spalte <strong>Saldo</strong> = kumulierter Gesamtsaldo (startet vom Übertrag-Startwert). Grün = Überstunden, Rot = Minusstunden.</p>
         </div>
 
         <div class="help-card">
@@ -1068,8 +1068,13 @@ footer .fv{background:var(--primary-soft);color:var(--primary);padding:2px 7px;b
         </div>
 
         <div class="help-card">
-          <h3>⚙ Einstellungen</h3>
-          <p>Sollzeit in h + min, Arbeitstage/Woche (1–7), Jahresurlaubs-Kontingent. Alle Kennzahlen und Dashboard-Charts passen sich sofort an.</p>
+          <h3>👤 Profile</h3>
+          <p>Mehrere Profile (z.B. Hauptjob / Nebenjob). Jedes Profil hat eigene Sollzeit, Arbeitstage/Woche, Jahresurlaub und Stundenkonto-Startwert (Übertrag). Wechsel per Header-Chip.</p>
+        </div>
+
+        <div class="help-card">
+          <h3>⚙ App-Einstellungen</h3>
+          <p>Globale Einstellung: Auto-Backup-Erinnerung (täglich, wöchentlich, monatlich, aus). Alle arbeitszeit-relevanten Werte sind direkt im jeweiligen Profil konfigurierbar.</p>
         </div>
 
         <div class="help-card">
@@ -1862,7 +1867,7 @@ function toggleBurger() {
   const open = document.getElementById('burgerPanel').classList.contains('open');
   document.getElementById('burgerPanel').classList.toggle('open', !open);
   document.getElementById('burgerOverlay').classList.toggle('open', !open);
-  if (!open) renderBurgerProfiles();
+  if (!open) { renderBurgerProfiles(); const fv=document.getElementById('menuFooterVer'); if(fv) fv.textContent=TOOL_CONFIG.version; }
 }
 function closeBurger() {
   document.getElementById('burgerPanel').classList.remove('open');
@@ -2394,7 +2399,8 @@ function updateVacPreview() {
   const cfg=VAC_TYPES[type]||VAC_TYPES['Urlaub'];
   prev.innerHTML=`${cfg.icon} <strong>${wd.length} Werktag${wd.length!==1?'e':''}</strong> (${cal} Kalendertag${cal!==1?'e':''})`;
   if (type==='Urlaub') {
-    const already=countVacDays('Urlaub',from.slice(0,4)),total=data.settings.urlaubstage||30,rem=total-already-wd.length;
+    const _vpc=getCategories().find(c=>c.id===activeProfileId());
+    const already=countVacDays('Urlaub',from.slice(0,4)),total=(_vpc&&_vpc.urlaubstage!=null)?_vpc.urlaubstage:(data.settings.urlaubstage||30),rem=total-already-wd.length;
     prev.innerHTML+=` &nbsp;·&nbsp; Resturlaub: <strong style="color:${rem<0?'var(--danger)':'var(--secondary)'}">${rem}</strong> von ${total} Tagen`;
   }
 }
@@ -2715,7 +2721,8 @@ function renderDashboard() {
 
   // Vacation KPIs
   const vacTypes=[{key:'Urlaub',color:cc.primary,icon:'🏖'},{key:'Krank',color:cc.danger,icon:'🤒'},{key:'Feiertag',color:cc.secondary,icon:'🎉'},{key:'Sonderurlaub',color:cc.accent,icon:'✨'}];
-  const ug=data.settings.urlaubstage||30,vc={};
+  const _dprofCat=getCategories().find(c=>c.id===_dpid);
+  const ug=(_dprofCat&&_dprofCat.urlaubstage!=null)?_dprofCat.urlaubstage:(data.settings.urlaubstage||30),vc={};
   vacTypes.forEach(t=>{vc[t.key]=countVacDays(t.key,yr);});
   const tvd=Object.values(vc).reduce((a,b)=>a+b,0);
 
