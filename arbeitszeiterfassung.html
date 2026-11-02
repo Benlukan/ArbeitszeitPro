@@ -13,7 +13,7 @@
 <script>
 const TOOL_CONFIG = {
     name:    "Arbeitszeiterfassung Pro",
-    version: "1.6.4",
+    version: "1.6.5",
     emoji:   "⏱",
     storageKey: "az_pro_data_v2"
 };
@@ -333,6 +333,10 @@ footer .fv{background:var(--primary-soft);color:var(--primary);padding:2px 7px;b
 /* ── Burger Menu ─────────────────────────────────────── */
 .burger-btn{background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--text);padding:6px 10px;border-radius:8px;transition:background .15s}
 .burger-btn:hover{background:var(--primary-soft)}
+.header-profile-chip{display:flex;align-items:center;gap:6px;padding:5px 10px 5px 7px;border-radius:20px;border:none;background:var(--primary-soft);cursor:pointer;transition:opacity .15s;max-width:160px}
+.header-profile-chip:hover{opacity:.8}
+.hpc-icon{width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.85rem;flex-shrink:0}
+.hpc-label{font-size:.78rem;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .burger-panel{position:fixed;top:0;right:-320px;width:min(320px,90vw);height:100%;background:var(--card);box-shadow:-4px 0 24px rgba(0,0,0,.18);z-index:1400;display:flex;flex-direction:column;transition:right .28s cubic-bezier(.4,0,.2,1);overflow-y:auto}
 .burger-panel.open{right:0}
 .burger-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:1300;display:none;backdrop-filter:blur(2px)}
@@ -454,7 +458,7 @@ footer .fv{background:var(--primary-soft);color:var(--primary);padding:2px 7px;b
     </div>
   </div>
   <div style="padding:20px;margin-top:auto;font-size:.72rem;color:var(--text-muted);text-align:center">
-    ArbeitzeitPro v1.6.4 · by David Digital
+    ArbeitzeitPro v1.6.5 · by David Digital
   </div>
 </div>
 
@@ -702,7 +706,11 @@ footer .fv{background:var(--primary-soft);color:var(--primary);padding:2px 7px;b
   <!-- HEADER -->
   <div class="header">
     <h1>⏱ Arbeitszeit<span>Pro</span></h1>
-    <div class="header-actions">
+    <div class="header-actions" style="display:flex;align-items:center;gap:8px">
+      <button class="header-profile-chip" id="headerProfileChip" onclick="toggleBurger()" title="Profil wechseln">
+        <span class="hpc-icon" id="hpcIcon">💼</span>
+        <span class="hpc-label" id="hpcLabel">Job</span>
+      </button>
       <button class="burger-btn" onclick="toggleBurger()" title="Menü">☰</button>
     </div>
   </div>
@@ -1173,12 +1181,22 @@ function catBadge(catId) {
 }
 
 // ── Profil-Switcher ─────────────────────────
+function renderHeaderProfile() {
+  const pid = activeProfileId();
+  const cat = getCategories().find(c => c.id === pid) || getCategories()[0];
+  if (!cat) return;
+  const icon = document.getElementById('hpcIcon');
+  const lbl  = document.getElementById('hpcLabel');
+  if (icon) { icon.textContent = cat.icon; icon.style.background = cat.color + '22'; icon.style.color = cat.color; }
+  if (lbl)  { lbl.textContent = cat.label; }
+}
 function selectActiveProfile(id) {
   data.settings.activeProfile = id;
   saveData();
   selectCategory(id);   // Formular-Selector mitziehen
   renderProfileRow();
   renderHeroChip();
+  renderHeaderProfile();
   // Per-Profil-State zurücksetzen (eigene Zeiterfassung / Dashboard)
   viewWeekOffset = 0;
   activeFilter = 'all';
@@ -1297,9 +1315,10 @@ function getVacWeekdays(from,to) {
   }
   return days;
 }
-const getVacForDate = ds => (data.vacations||[]).find(v=>ds>=v.dateFrom&&ds<=v.dateTo)||null;
+const profileVacs   = () => (data.vacations||[]).filter(v=>(v.category||'job')===activeProfileId());
+const getVacForDate = ds => profileVacs().find(v=>ds>=v.dateFrom&&ds<=v.dateTo)||null;
 const countVacDays  = (type,yr) =>
-  (data.vacations||[]).filter(v=>v.type===type&&(v.dateFrom.startsWith(yr)||v.dateTo.startsWith(yr)))
+  profileVacs().filter(v=>v.type===type&&(v.dateFrom.startsWith(yr)||v.dateTo.startsWith(yr)))
     .reduce((s,v)=>s+getVacWeekdays(v.dateFrom,v.dateTo).filter(d=>d.startsWith(yr)).length,0);
 
 // ══════════════════════════════════════════
@@ -1472,6 +1491,7 @@ function togglePause() {
 function render() {
   renderProfileRow();
   renderHeroChip();
+  renderHeaderProfile();
   const a=getActive();
   const dot=document.getElementById('statusDot'),lbl=document.getElementById('statusLabel');
   const btn=document.getElementById('mainBtn'),pb=document.getElementById('pauseBtn');
@@ -2230,7 +2250,7 @@ function saveVacation() {
   if(!from||!to){toast('Bitte Von- und Bis-Datum wählen.','error');return;}
   if(to<from){toast('Enddatum vor Startdatum!','error');return;}
   if(!data.vacations)data.vacations=[];
-  data.vacations.push({id:uid(),type,dateFrom:from,dateTo:to,note});
+  data.vacations.push({id:uid(),type,dateFrom:from,dateTo:to,note,category:activeProfileId()});
   saveData();closeModal('modal-vac');render();
   toast(type+' eingetragen: '+getVacWeekdays(from,to).length+' Werktage ✓','success');
 }
@@ -2550,17 +2570,18 @@ function renderDashboard() {
   }).join('');
 
   // Chart 6: Abwesenheiten/Monat
+  const pv=profileVacs();
   const absM=new Set();
   const l12=new Date();l12.setMonth(l12.getMonth()-11);l12.setDate(1);
   for(let d=new Date(l12);d<=new Date();d.setMonth(d.getMonth()+1))absM.add(toDateStr(d).slice(0,7));
-  (data.vacations||[]).forEach(v=>{absM.add(v.dateFrom.slice(0,7));absM.add(v.dateTo.slice(0,7));});
+  pv.forEach(v=>{absM.add(v.dateFrom.slice(0,7));absM.add(v.dateTo.slice(0,7));});
   const absMK=[...absM].sort().slice(-12);
   document.getElementById('dashAbsMonthsLabel').textContent='letzte '+absMK.length+' Monate';
   destroyChart('chartAbsMonths');
   _charts['chartAbsMonths']=new Chart(document.getElementById('chartAbsMonths'),{type:'bar',data:{
     labels:absMK.map(k=>MONTHS[parseInt(k.split('-')[1])-1].slice(0,3)+' '+k.slice(2,4)),
     datasets:vacTypes.map(t=>({label:t.icon+' '+t.key,
-      data:absMK.map(mo=>(data.vacations||[]).filter(v=>v.type===t.key).reduce((s,v)=>s+getVacWeekdays(v.dateFrom,v.dateTo).filter(d=>d.startsWith(mo)).length,0)),
+      data:absMK.map(mo=>pv.filter(v=>v.type===t.key).reduce((s,v)=>s+getVacWeekdays(v.dateFrom,v.dateTo).filter(d=>d.startsWith(mo)).length,0)),
       backgroundColor:t.color+'CC',borderColor:t.color,borderWidth:1,borderRadius:3}))
   },options:{...baseOpts(cc),plugins:{...baseOpts(cc).plugins,legend:{display:true,labels:{color:cc.text,font:{size:11},boxWidth:12,padding:10}},tooltip:{...baseOpts(cc).plugins.tooltip,mode:'index',intersect:false,callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.raw} Tag${ctx.raw!==1?'e':''}`}}},
     scales:{...baseOpts(cc).scales,x:{...baseOpts(cc).scales.x,stacked:true},y:{...baseOpts(cc).scales.y,stacked:true,ticks:{...baseOpts(cc).scales.y.ticks,callback:v=>v+'d',stepSize:1}}}}});
