@@ -13,7 +13,7 @@
 <script>
 const TOOL_CONFIG = {
     name:    "Arbeitszeiterfassung Pro",
-    version: "1.6.1",
+    version: "1.6.2",
     emoji:   "⏱",
     storageKey: "az_pro_data_v2"
 };
@@ -354,6 +354,18 @@ footer .fv{background:var(--primary-soft);color:var(--primary);padding:2px 7px;b
 .cat-hobby{background:rgba(16,185,129,.12);color:#10b981}
 .cat-ehrenamt{background:rgba(245,158,11,.12);color:#d97706}
 .cat-sonstiges{background:rgba(107,114,128,.12);color:#6b7280}
+/* ── Profil-Switcher ─────────────────────── */
+.profile-row{display:flex;gap:10px;overflow-x:auto;padding:0 2px 6px;scrollbar-width:none;-webkit-overflow-scrolling:touch;margin-bottom:14px}
+.profile-row::-webkit-scrollbar{display:none}
+.profile-btn{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:5px;padding:12px 18px;border-radius:14px;border:2px solid var(--border);background:var(--card);cursor:pointer;transition:all .2s;position:relative;min-width:72px;box-shadow:var(--shadow)}
+.profile-btn .pb-icon{font-size:1.6rem;line-height:1;transition:transform .2s}
+.profile-btn .pb-label{font-size:.68rem;font-weight:700;color:var(--text-muted);transition:color .2s;white-space:nowrap}
+.profile-btn.active{border-color:var(--pb-color,var(--primary));background:color-mix(in srgb,var(--pb-color,var(--primary)) 10%,var(--card));box-shadow:0 0 0 3px color-mix(in srgb,var(--pb-color,var(--primary)) 18%,transparent),var(--shadow)}
+.profile-btn.active .pb-icon{transform:scale(1.12)}
+.profile-btn.active .pb-label{color:var(--pb-color,var(--primary))}
+.profile-btn.active::after{content:'';position:absolute;bottom:-7px;left:50%;transform:translateX(-50%);width:7px;height:7px;border-radius:50%;background:var(--pb-color,var(--primary))}
+.profile-btn:hover:not(.active){border-color:color-mix(in srgb,var(--pb-color,var(--primary)) 45%,var(--border));box-shadow:var(--shadow-hover)}
+/* ── Cat-Selector (in Formularen) ──────── */
 .cat-selector{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
 .cat-sel-btn{border:1.5px solid var(--border);background:none;border-radius:20px;padding:5px 14px;font-size:.8rem;font-weight:600;cursor:pointer;transition:all .15s;color:var(--text)}
 .cat-sel-btn.active{border-color:var(--primary);background:var(--primary-soft);color:var(--primary)}
@@ -630,11 +642,15 @@ footer .fv{background:var(--primary-soft);color:var(--primary);padding:2px 7px;b
       </div>
     </div>
 
+    <!-- Profil-Switcher -->
+    <div class="profile-row" id="profileRow"></div>
+
     <!-- Clock Hero -->
     <div class="clock-hero">
       <div>
         <div class="clock-time" id="clock">00:00:00</div>
         <div class="clock-date" id="dateLabel"></div>
+        <div id="heroProfileChip" style="margin-top:8px"></div>
       </div>
       <div class="clock-actions">
         <button class="btn-white btn-sm" onclick="openEntryDropdown(this, null)">＋ Neu ▾</button>
@@ -1067,6 +1083,36 @@ function catBadge(catId) {
   return `<span class="cat-badge cat-${catId}">${cat.icon} ${cat.label}</span>`;
 }
 
+// ── Profil-Switcher ─────────────────────────
+function selectActiveProfile(id) {
+  data.settings.activeProfile = id;
+  saveData();
+  selectCategory(id);   // Formular-Selector mitziehen
+  renderProfileRow();
+  renderHeroChip();
+}
+function renderProfileRow() {
+  const el = document.getElementById('profileRow'); if (!el) return;
+  const active = data.settings.activeProfile || 'job';
+  el.innerHTML = getCategories().map(c =>
+    `<button class="profile-btn${c.id===active?' active':''}"
+       style="--pb-color:${c.color}"
+       onclick="selectActiveProfile('${c.id}')">
+      <span class="pb-icon">${c.icon}</span>
+      <span class="pb-label">${c.label}</span>
+    </button>`
+  ).join('');
+}
+function renderHeroChip() {
+  const el = document.getElementById('heroProfileChip'); if (!el) return;
+  const active = data.settings.activeProfile || 'job';
+  const cat = getCategories().find(c=>c.id===active);
+  if (!cat) { el.innerHTML=''; return; }
+  el.innerHTML = `<span class="clock-profile-chip" onclick="document.getElementById('profileRow').scrollIntoView({behavior:'smooth'})">
+    ${cat.icon} ${cat.label}
+  </span>`;
+}
+
 // ── Storage I/O ────────────────────────────
 function loadData() {
   try {
@@ -1076,6 +1122,7 @@ function loadData() {
     if(!data.settings.urlaubstage) data.settings.urlaubstage=30;
     if(!data.settings.autoBackupInterval) data.settings.autoBackupInterval='weekly';
     if(data.settings.stundenkontoStart == null) data.settings.stundenkontoStart=0;
+    if(!data.settings.activeProfile) data.settings.activeProfile='job';
     if(!data.settings.categories) data.settings.categories=getDefaultCategories();
     else {
       // Migrate existing categories to profiles: add sollMin/tageProWoche if missing
@@ -1217,7 +1264,8 @@ function toggleClock() {
     const now = new Date();
     data.entries.push({
       id: uid(), date: toDateStr(now), start: toTimeStr(now),
-      end: null, breakMin: 0, note: '', paused: false, pauseStarted: null
+      end: null, breakMin: 0, note: '', paused: false, pauseStarted: null,
+      category: data.settings.activeProfile || 'job'
     });
     toast('Eingestempelt ✓', 'success');
     saveData(); render(); return;
@@ -1308,6 +1356,8 @@ function togglePause() {
 //  RENDER
 // ══════════════════════════════════════════
 function render() {
+  renderProfileRow();
+  renderHeroChip();
   const a=getActive();
   const dot=document.getElementById('statusDot'),lbl=document.getElementById('statusLabel');
   const btn=document.getElementById('mainBtn'),pb=document.getElementById('pauseBtn');
@@ -1556,7 +1606,7 @@ function openAdd(date) {
   document.getElementById('eNote').value='';
   setLocation('Büro');
   document.getElementById('deleteBtn').classList.add('hidden');
-  renderCatSelector(); selectCategory('job');
+  renderCatSelector(); selectCategory(data.settings.activeProfile||'job');
   openModal('modal-entry');
 }
 function openEdit(id) {
