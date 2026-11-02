@@ -13,7 +13,7 @@
 <script>
 const TOOL_CONFIG = {
     name:    "Arbeitszeiterfassung Pro",
-    version: "1.6.5",
+    version: "1.6.6",
     emoji:   "⏱",
     storageKey: "az_pro_data_v2"
 };
@@ -337,6 +337,10 @@ footer .fv{background:var(--primary-soft);color:var(--primary);padding:2px 7px;b
 .header-profile-chip:hover{opacity:.8}
 .hpc-icon{width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.85rem;flex-shrink:0}
 .hpc-label{font-size:.78rem;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.emoji-picker{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.emoji-btn{width:36px;height:36px;border-radius:8px;border:2px solid transparent;background:var(--bg);cursor:pointer;font-size:1.15rem;display:flex;align-items:center;justify-content:center;transition:background .12s,border-color .12s}
+.emoji-btn:hover{background:var(--primary-soft)}
+.emoji-btn.sel{border-color:var(--primary);background:var(--primary-soft)}
 .burger-panel{position:fixed;top:0;right:-320px;width:min(320px,90vw);height:100%;background:var(--card);box-shadow:-4px 0 24px rgba(0,0,0,.18);z-index:1400;display:flex;flex-direction:column;transition:right .28s cubic-bezier(.4,0,.2,1);overflow-y:auto}
 .burger-panel.open{right:0}
 .burger-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:1300;display:none;backdrop-filter:blur(2px)}
@@ -458,7 +462,7 @@ footer .fv{background:var(--primary-soft);color:var(--primary);padding:2px 7px;b
     </div>
   </div>
   <div style="padding:20px;margin-top:auto;font-size:.72rem;color:var(--text-muted);text-align:center">
-    ArbeitzeitPro v1.6.5 · by David Digital
+    ArbeitzeitPro v1.6.6 · by David Digital
   </div>
 </div>
 
@@ -593,7 +597,8 @@ footer .fv{background:var(--primary-soft);color:var(--primary);padding:2px 7px;b
     <div class="modal-body">
       <div class="form-group">
         <label>Icon <span style="font-size:.72rem;color:var(--text-muted);font-weight:400">(Emoji, 1–2 Zeichen)</span></label>
-        <input type="text" id="peIcon" maxlength="2" placeholder="💼" style="width:60px;text-align:center;font-size:1.4rem;padding:8px">
+        <input type="text" id="peIcon" maxlength="2" placeholder="💼" style="width:60px;text-align:center;font-size:1.4rem;padding:8px" oninput="syncEmojiPicker()">
+        <div class="emoji-picker" id="emojiPicker"></div>
       </div>
       <div class="form-group">
         <label>Name</label>
@@ -1872,13 +1877,38 @@ function switchBurgerProfile(id) {
 // ══════════════════════════════════════════
 let _editingProfileId = null;
 const PROFILE_COLORS = ['#6366f1','#10b981','#f59e0b','#ef4444','#3b82f6','#8b5cf6','#ec4899','#6b7280'];
+const PROFILE_EMOJIS = [
+  '💼','🏠','🖥️','💻','📱','🖨️',
+  '🔧','⚙️','🛠️','🏗️','🔬','🧪',
+  '📊','📈','💰','🏦','📋','📝',
+  '🚗','✈️','🚀','🌍','📦','🛒',
+  '🎨','🎵','🎓','📚','✏️','🏋️',
+  '🍳','🌿','🏥','⚡','🔒','⭐'
+];
+
+function renderEmojiPicker(current) {
+  const el = document.getElementById('emojiPicker'); if(!el) return;
+  el.innerHTML = PROFILE_EMOJIS.map(e =>
+    `<button type="button" class="emoji-btn${e===current?' sel':''}" onclick="selectProfileEmoji('${e}')" title="${e}">${e}</button>`
+  ).join('');
+}
+function selectProfileEmoji(e) {
+  document.getElementById('peIcon').value = e;
+  document.querySelectorAll('#emojiPicker .emoji-btn').forEach(b => b.classList.toggle('sel', b.textContent.trim()===e));
+}
+function syncEmojiPicker() {
+  const v = document.getElementById('peIcon').value.trim();
+  document.querySelectorAll('#emojiPicker .emoji-btn').forEach(b => b.classList.toggle('sel', b.textContent.trim()===v));
+}
 
 function openProfileEdit(id) {
   _editingProfileId = id;
   const profiles = getCategories();
   const cat = id ? profiles.find(c=>c.id===id) : null;
   document.getElementById('peMTitle').textContent = cat ? '✎ Profil bearbeiten' : '＋ Neues Profil';
-  document.getElementById('peIcon').value = cat ? cat.icon : '📌';
+  const initIcon = cat ? cat.icon : '📌';
+  document.getElementById('peIcon').value = initIcon;
+  renderEmojiPicker(initIcon);
   document.getElementById('peName').value = cat ? cat.label : '';
   const sollM = cat ? (cat.sollMin||0) : 480;
   document.getElementById('peSollH').value = Math.floor(sollM/60);
