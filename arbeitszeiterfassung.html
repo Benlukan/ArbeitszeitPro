@@ -13,7 +13,7 @@
 <script>
 const TOOL_CONFIG = {
     name:    "Arbeitszeiterfassung Pro",
-    version: "1.6.6",
+    version: "1.6.7",
     emoji:   "⏱",
     storageKey: "az_pro_data_v2"
 };
@@ -452,6 +452,16 @@ footer .fv{background:var(--primary-soft);color:var(--primary);padding:2px 7px;b
   </div>
   <div class="burger-divider"></div>
   <div class="burger-section">
+    <div class="burger-section-title">Info</div>
+    <button class="burger-item" onclick="closeBurger();switchTab('hilfe')">
+      <span class="bi-icon">📖</span> Hilfe &amp; Features
+    </button>
+    <button class="burger-item" onclick="closeBurger();openModal('modal-privacy')">
+      <span class="bi-icon">🔒</span> Datenschutz
+    </button>
+  </div>
+  <div class="burger-divider"></div>
+  <div class="burger-section">
     <div class="burger-section-title">Cloud <span class="burger-cloud-badge">Bald verfügbar</span></div>
     <div class="burger-item" style="cursor:default;opacity:.55">
       <span class="bi-icon">☁</span>
@@ -462,7 +472,7 @@ footer .fv{background:var(--primary-soft);color:var(--primary);padding:2px 7px;b
     </div>
   </div>
   <div style="padding:20px;margin-top:auto;font-size:.72rem;color:var(--text-muted);text-align:center">
-    ArbeitzeitPro v1.6.6 · by David Digital
+    ArbeitzeitPro v1.6.7 · by David Digital
   </div>
 </div>
 
@@ -725,7 +735,6 @@ footer .fv{background:var(--primary-soft);color:var(--primary);padding:2px 7px;b
   <div class="nav-tabs">
     <button class="tab-btn active" data-tab="zeiterfassung" onclick="switchTab('zeiterfassung')">⏱ Zeiterfassung</button>
     <button class="tab-btn" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Dashboard</button>
-    <button class="tab-btn" data-tab="hilfe" onclick="switchTab('hilfe')">📖 Hilfe</button>
   </div>
 
   <!-- ══ TAB: ZEITERFASSUNG ══ -->
@@ -1995,7 +2004,6 @@ function updateExportPreview() {
 function getMonthEntries(pid, month) {
   // month = "YYYY-MM"
   return data.entries.filter(e =>
-    e.end &&
     (e.category || 'job') === pid &&
     e.date && e.date.startsWith(month)
   ).sort((a, b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start));
@@ -2063,62 +2071,140 @@ function buildMonthPrintHTML(pid, month) {
   const cat = getCategories().find(c => c.id === pid) || getCategories()[0];
   const entries = getMonthEntries(pid, month);
   const soll = cat ? (cat.sollMin || 0) : 0;
-  const DAYS_DE = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
+  const DAYS_DE = ['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
   const [y, m] = month.split('-');
-  const monthLabel = new Date(parseInt(y), parseInt(m) - 1, 1).toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
-  let totalNet = 0, totalSaldo = 0;
-  const rows = entries.map(e => {
-    const netM = calcNetMin(e);
-    const saldoM = netM - soll;
-    totalNet += netM;
-    totalSaldo += saldoM;
-    const dt = new Date(e.date + 'T00:00:00');
-    const saldoSign = saldoM >= 0 ? '+' : '';
+  const monthLabel = new Date(parseInt(y), parseInt(m)-1, 1).toLocaleDateString('de-DE', {month:'long', year:'numeric'});
+
+  // Vacation color/label map for print
+  const VAC_PRINT = {
+    'Urlaub':       { color:'#3b82f6', bg:'#eff6ff', label:'Urlaub 🏖' },
+    'Krank':        { color:'#ef4444', bg:'#fef2f2', label:'Krankmeldung 🤒' },
+    'Feiertag':     { color:'#10b981', bg:'#f0fdf4', label:'Feiertag 🎉' },
+    'Sonderurlaub': { color:'#8b5cf6', bg:'#f5f3ff', label:'Sonderurlaub ✨' },
+  };
+
+  // Expand vacation ranges into individual weekdays within this month
+  const vacDays = [];
+  (data.vacations || []).filter(v => (v.category || 'job') === pid).forEach(v => {
+    getVacWeekdays(v.dateFrom, v.dateTo).forEach(d => {
+      if (d.startsWith(month)) vacDays.push({ date: d, type: v.type, note: v.note || '', isVac: true });
+    });
+  });
+
+  // Merge time entries + vacation days, sort by date then start time
+  const allRows = [
+    ...entries.map(e => ({ ...e, isVac: false })),
+    ...vacDays
+  ].sort((a, b) => a.date.localeCompare(b.date) || (a.start || '').localeCompare(b.start || ''));
+
+  // Summary stats (only completed time entries count toward saldo/net)
+  const hasNotes = allRows.some(r => r.note);
+  let totalNet = 0, totalSaldo = 0, workDays = 0;
+  entries.forEach(e => {
+    const n = calcNetMin(e);
+    totalNet += n;
+    if (e.end) { totalSaldo += n - soll; workDays++; }
+  });
+  const vacCount = vacDays.length;
+  const colCount = hasNotes ? 8 : 7;
+
+  // Build table rows
+  const rows = allRows.map(row => {
+    const dt = new Date(row.date + 'T00:00:00');
+    const dateStr = dt.toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit', year:'numeric'});
+    const dayStr = DAYS_DE[dt.getDay()];
+    if (row.isVac) {
+      const vp = VAC_PRINT[row.type] || VAC_PRINT['Urlaub'];
+      return `<tr style="border-left:3px solid ${vp.color};background:${vp.bg}">
+        <td>${dateStr}</td><td>${dayStr}</td>
+        <td colspan="${colCount - 2}" style="color:${vp.color};font-weight:600">${vp.label}${row.note ? ' — ' + row.note : ''}</td>
+      </tr>`;
+    }
+    const netM = calcNetMin(row);
+    const saldoM = row.end ? netM - soll : null;
+    const endStr = row.end || '<span style="color:#f59e0b;font-style:italic">läuft…</span>';
+    const saldoSign = saldoM !== null && saldoM >= 0 ? '+' : '';
+    const saldoStr = saldoM !== null
+      ? `<span style="color:${saldoM >= 0 ? '#059669' : '#dc2626'}">${saldoSign}${fmtHM(Math.abs(saldoM))}</span>`
+      : '—';
+    const noteCell = hasNotes ? `<td class="note-cell">${row.note || ''}</td>` : '';
     return `<tr>
-      <td>${e.date}</td>
-      <td>${DAYS_DE[dt.getDay()]}</td>
-      <td>${e.start}</td>
-      <td>${e.end}</td>
-      <td style="text-align:center">${e.breakMin || 0}</td>
-      <td style="text-align:right;font-weight:600">${fmtHM(netM)}</td>
-      <td style="text-align:right;color:${saldoM >= 0 ? '#059669' : '#dc2626'}">${saldoSign}${fmtHM(Math.abs(saldoM))}${saldoM < 0 ? ' ▼' : ''}</td>
-      <td style="color:#6b7280;font-size:.82em">${e.note || ''}</td>
+      <td>${dateStr}</td><td>${dayStr}</td>
+      <td>${row.start}</td><td>${endStr}</td>
+      <td class="num">${row.end ? (row.breakMin || 0) : '—'}</td>
+      <td class="num bold">${row.end ? fmtHM(netM) : '—'}</td>
+      <td class="num">${saldoStr}</td>
+      ${noteCell}
     </tr>`;
   }).join('');
+
   const totalSaldoSign = totalSaldo >= 0 ? '+' : '';
+  const colgroupCols = hasNotes
+    ? `<col style="width:72px"><col style="width:68px"><col style="width:42px"><col style="width:52px"><col style="width:40px"><col style="width:52px"><col style="width:54px"><col>`
+    : `<col style="width:80px"><col style="width:76px"><col style="width:46px"><col style="width:56px"><col style="width:44px"><col style="width:60px"><col>`;
+
   return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8">
 <title>Zeiterfassung ${monthLabel} – ${cat ? cat.label : ''}</title>
 <style>
-  @page { size: A4 landscape; margin: 15mm 12mm; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 11px; color: #111; margin: 0 }
-  h1 { font-size: 18px; margin: 0 0 2px; color: #4f46e5 }
-  .meta { font-size: 11px; color: #6b7280; margin-bottom: 14px }
+  @page { size: A4 portrait; margin: 15mm 12mm 12mm; }
+  * { box-sizing: border-box }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; font-size: 10.5px; color: #111; margin: 0; padding: 0 }
+  .print-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 14px; border-bottom: 2px solid #4f46e5; padding-bottom: 10px }
+  .print-title { font-size: 18px; font-weight: 800; color: #4f46e5; margin: 0 0 3px }
+  .print-sub { font-size: 11px; color: #6b7280 }
+  .print-logo { font-size: 10px; color: #9ca3af; text-align: right }
+  .kacheln { display: flex; gap: 7px; margin-bottom: 14px }
+  .kachel { flex: 1; border: 1px solid #e5e7eb; border-radius: 6px; padding: 6px 9px }
+  .kachel-label { font-size: 8.5px; color: #6b7280; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px }
+  .kachel-value { font-size: 15px; font-weight: 800; color: #111 }
+  .kachel-value.pos { color: #059669 }
+  .kachel-value.neg { color: #dc2626 }
   table { width: 100%; border-collapse: collapse }
-  th { background: #4f46e5; color: #fff; padding: 6px 8px; text-align: left; font-size: 11px }
-  td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb }
+  thead { display: table-header-group }
+  th { background: #4f46e5; color: #fff; padding: 5px 7px; text-align: left; font-size: 10px; font-weight: 700 }
+  th.num { text-align: right }
+  td { padding: 4px 7px; border-bottom: 1px solid #e5e7eb; vertical-align: middle }
   tr:nth-child(even) td { background: #f9fafb }
-  tfoot td { background: #f3f4f6; font-weight: 700; border-top: 2px solid #4f46e5 }
+  tr { page-break-inside: avoid }
+  .num { text-align: right }
+  .bold { font-weight: 700 }
+  .note-cell { color: #6b7280; font-size: .9em; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+  tfoot td { background: #f3f4f6 !important; font-weight: 700; border-top: 2px solid #4f46e5; padding: 5px 7px }
+  .print-footer { margin-top: 10px; font-size: 9px; color: #9ca3af; text-align: right }
   @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact } }
 </style></head><body>
-<h1>⏱ Zeiterfassung – ${monthLabel}</h1>
-<div class="meta">Profil: <strong>${cat ? cat.icon + ' ' + cat.label : '—'}</strong> &nbsp;·&nbsp; Sollzeit/Tag: <strong>${fmtHM(soll)}</strong> &nbsp;·&nbsp; Einträge: <strong>${entries.length}</strong></div>
+<div class="print-header">
+  <div>
+    <div class="print-title">⏱ Zeiterfassung – ${monthLabel}</div>
+    <div class="print-sub">Profil: <strong>${cat ? cat.icon + ' ' + cat.label : '—'}</strong></div>
+  </div>
+  <div class="print-logo">ArbeitzeitPro ${TOOL_CONFIG.version}<br>Erstellt ${new Date().toLocaleDateString('de-DE')}</div>
+</div>
+<div class="kacheln">
+  <div class="kachel"><div class="kachel-label">Arbeitstage</div><div class="kachel-value">${workDays}</div></div>
+  <div class="kachel"><div class="kachel-label">Gesamtstunden</div><div class="kachel-value">${fmtHM(totalNet)}</div></div>
+  <div class="kachel"><div class="kachel-label">Saldo</div><div class="kachel-value ${totalSaldo >= 0 ? 'pos' : 'neg'}">${totalSaldoSign}${fmtHM(Math.abs(totalSaldo))}</div></div>
+  <div class="kachel"><div class="kachel-label">Sollzeit/Tag</div><div class="kachel-value">${fmtHM(soll)}</div></div>
+  <div class="kachel"><div class="kachel-label">Abwesenheiten</div><div class="kachel-value">${vacCount}</div></div>
+</div>
 <table>
+  <colgroup>${colgroupCols}</colgroup>
   <thead><tr>
     <th>Datum</th><th>Wochentag</th><th>Beginn</th><th>Ende</th>
-    <th style="text-align:center">Pause (min)</th>
-    <th style="text-align:right">Netto</th>
-    <th style="text-align:right">Saldo</th>
-    <th>Notiz</th>
+    <th class="num">Pause</th>
+    <th class="num">Netto</th>
+    <th class="num">Saldo</th>
+    ${hasNotes ? '<th>Notiz</th>' : ''}
   </tr></thead>
-  <tbody>${rows || '<tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:16px">Keine Einträge in diesem Monat</td></tr>'}</tbody>
+  <tbody>${rows || `<tr><td colspan="${colCount}" style="text-align:center;color:#9ca3af;padding:16px">Keine Einträge in diesem Monat</td></tr>`}</tbody>
   <tfoot><tr>
-    <td colspan="5">Gesamt (${entries.length} Tage)</td>
-    <td style="text-align:right">${fmtHM(totalNet)}</td>
-    <td style="text-align:right;color:${totalSaldo >= 0 ? '#059669' : '#dc2626'}">${totalSaldoSign}${fmtHM(Math.abs(totalSaldo))}</td>
-    <td></td>
+    <td colspan="5">Gesamt · ${workDays} Arbeitstag${workDays !== 1 ? 'e' : ''}, ${vacCount} Abwesenheit${vacCount !== 1 ? 'en' : ''}</td>
+    <td class="num">${fmtHM(totalNet)}</td>
+    <td class="num" style="color:${totalSaldo >= 0 ? '#059669' : '#dc2626'}">${totalSaldoSign}${fmtHM(Math.abs(totalSaldo))}</td>
+    ${hasNotes ? '<td></td>' : ''}
   </tr></tfoot>
 </table>
-<div style="margin-top:20px;font-size:10px;color:#9ca3af">Erstellt am ${new Date().toLocaleDateString('de-DE')} · ArbeitzeitPro ${TOOL_CONFIG.version}</div>
+<div class="print-footer">Erstellt am ${new Date().toLocaleDateString('de-DE')} · ArbeitzeitPro ${TOOL_CONFIG.version}</div>
 </body></html>`;
 }
 
