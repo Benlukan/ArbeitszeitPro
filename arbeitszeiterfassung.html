@@ -13,7 +13,7 @@
 <script>
 const TOOL_CONFIG = {
     name:    "Arbeitszeiterfassung Pro",
-    version: "1.6.2",
+    version: "1.6.3",
     emoji:   "⏱",
     storageKey: "az_pro_data_v2"
 };
@@ -386,6 +386,18 @@ footer .fv{background:var(--primary-soft);color:var(--primary);padding:2px 7px;b
 .cat-list-item{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
 .cat-list-item:last-child{border-bottom:none}
 .cat-list-item input{flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-size:.85rem}
+/* Burger profile rows */
+.burger-profile-row{display:flex;align-items:center;gap:10px;padding:9px 14px;border-radius:10px;cursor:pointer;transition:background .15s;border:none;background:none;width:100%;text-align:left}
+.burger-profile-row:hover{background:var(--primary-soft)}
+.burger-profile-row.active{background:var(--primary-soft)}
+.burger-profile-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0}
+.burger-profile-name{flex:1;font-size:.87rem;font-weight:600;color:var(--text)}
+.burger-profile-check{font-size:.85rem;width:20px;text-align:center;color:var(--primary)}
+.bpe-btn{background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px 7px;border-radius:6px;font-size:.82rem;transition:background .15s}
+.bpe-btn:hover{background:var(--border);color:var(--text)}
+/* Profile edit modal color swatches */
+.color-swatch{width:32px;height:32px;border-radius:8px;border:2px solid transparent;cursor:pointer;transition:all .15s;display:inline-block}
+.color-swatch.sel{border-color:var(--text)!important;transform:scale(1.15);box-shadow:0 0 0 3px var(--card)}
 </style>
 </head>
 <body data-theme="light">
@@ -405,8 +417,13 @@ footer .fv{background:var(--primary-soft);color:var(--primary);padding:2px 7px;b
     <button class="burger-item" onclick="closeBurger();openSettings()">
       <span class="bi-icon">⚙</span> Einstellungen
     </button>
-    <button class="burger-item" onclick="closeBurger();openCategoriesModal()">
-      <span class="bi-icon">🏷</span> Kategorien
+  </div>
+  <div class="burger-divider"></div>
+  <div class="burger-section">
+    <div class="burger-section-title">Profile</div>
+    <div id="burgerProfileList"></div>
+    <button class="burger-item" onclick="openProfileEdit(null)">
+      <span class="bi-icon" style="background:var(--primary-soft);color:var(--primary)">＋</span> Profil hinzufügen
     </button>
   </div>
   <div class="burger-divider"></div>
@@ -434,7 +451,7 @@ footer .fv{background:var(--primary-soft);color:var(--primary);padding:2px 7px;b
     </div>
   </div>
   <div style="padding:20px;margin-top:auto;font-size:.72rem;color:var(--text-muted);text-align:center">
-    ArbeitzeitPro v1.6.0 · by David Digital
+    ArbeitzeitPro v1.6.3 · by David Digital
   </div>
 </div>
 
@@ -557,6 +574,51 @@ footer .fv{background:var(--primary-soft);color:var(--primary);padding:2px 7px;b
     <div class="modal-footer">
       <button onclick="closeModal('modal-categories')" class="btn-outline">Abbrechen</button>
       <button onclick="saveCategoriesModal()" class="btn-primary">💾 Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- PROFILE EDIT MODAL -->
+<div class="modal" id="modal-profile-edit" onclick="if(event.target===this)closeModal('modal-profile-edit')">
+  <div class="modal-box">
+    <button class="modal-close-btn" onclick="closeModal('modal-profile-edit')">✕</button>
+    <div class="modal-header"><h2 id="peMTitle">Profil bearbeiten</h2></div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Icon <span style="font-size:.72rem;color:var(--text-muted);font-weight:400">(Emoji, 1–2 Zeichen)</span></label>
+        <input type="text" id="peIcon" maxlength="2" placeholder="💼" style="width:60px;text-align:center;font-size:1.4rem;padding:8px">
+      </div>
+      <div class="form-group">
+        <label>Name</label>
+        <input type="text" id="peName" placeholder="Mein Profil">
+      </div>
+      <div class="form-group">
+        <label>Farbe</label>
+        <div id="peColorSwatches" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px"></div>
+      </div>
+      <div class="form-group">
+        <label>Tägliche Sollzeit <span style="font-size:.72rem;color:var(--text-muted);font-weight:400">(0h 0min = kein Soll)</span></label>
+        <div class="form-row-2">
+          <div style="display:flex;align-items:center;gap:6px">
+            <input type="number" id="peSollH" min="0" max="23" value="8" style="width:60px;text-align:center">
+            <span style="font-size:.8rem;color:var(--text-muted)">h</span>
+            <input type="number" id="peSollM" min="0" max="59" value="0" style="width:60px;text-align:center">
+            <span style="font-size:.8rem;color:var(--text-muted)">min</span>
+          </div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Tage pro Woche</label>
+        <div style="display:flex;align-items:center;gap:8px">
+          <input type="number" id="peTage" min="0" max="7" value="5" style="width:60px;text-align:center">
+          <span style="font-size:.8rem;color:var(--text-muted)">Tage</span>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer" style="flex-wrap:wrap;gap:8px">
+      <button id="peDeleteBtn" class="btn-outline" style="color:var(--danger);border-color:var(--danger);margin-right:auto;display:none" onclick="deleteActiveProfile()">🗑 Löschen</button>
+      <button onclick="closeModal('modal-profile-edit')" class="btn-outline">Abbrechen</button>
+      <button onclick="saveProfileEdit()" class="btn-primary">💾 Speichern</button>
     </div>
   </div>
 </div>
@@ -1165,7 +1227,18 @@ function calcWorkMin(e) {
   if (!e.end) return null;
   return Math.max(0, Math.round((parseDateTime(e.date,e.end)-parseDateTime(e.date,e.start))/60000)-(e.breakMin||0));
 }
-const getActive   = () => data.entries.find(e=>!e.end);
+function activeProfileId() { return data.settings.activeProfile || 'job'; }
+function getProfileEntries() {
+  const pid = activeProfileId();
+  return data.entries.filter(e => (e.category||'job') === pid);
+}
+// getActive: returns running entry for CURRENT profile only
+function getActive() {
+  const pid = activeProfileId();
+  return data.entries.find(e => !e.end && (e.category||'job') === pid);
+}
+// getAnyActive: any running entry (for global lock checks)
+const getAnyActive = () => data.entries.find(e=>!e.end);
 const isWeekend   = ds => [0,6].includes(new Date(ds).getDay());
 const uid         = () => Date.now().toString(36)+Math.random().toString(36).slice(2,5);
 const dateStamp   = () => todayStr();
@@ -1261,6 +1334,13 @@ let _pendingManualEntry = null; // Manuell-Flow: saved entry waiting for pause h
 function toggleClock() {
   const a = getActive();
   if (!a) {
+    // Check if another profile has a running entry
+    const anyRunning = getAnyActive();
+    if (anyRunning) {
+      const otherCat = getCategories().find(c=>c.id===(anyRunning.category||'job'));
+      toast(`Zuerst "${otherCat?otherCat.label:'anderes Profil'}" ausstempeln`, 'error');
+      return;
+    }
     const now = new Date();
     data.entries.push({
       id: uid(), date: toDateStr(now), start: toTimeStr(now),
@@ -1372,32 +1452,35 @@ function render() {
     btn.className='btn-green'; btn.textContent='▶ Einstempeln';
     pb.classList.add('hidden');
   }
-  const soll=data.settings.sollMin, tage=data.settings.tageProWoche;
+  const pid=activeProfileId();
+  const profCat=getCategories().find(c=>c.id===pid)||getCategories()[0];
+  const soll=profCat?(profCat.sollMin||0):(data.settings.sollMin||480);
+  const tage=profCat?(profCat.tageProWoche!=null?profCat.tageProWoche:5):(data.settings.tageProWoche||5);
   document.getElementById('mSollH').textContent=formatMin(soll);
   document.getElementById('mSollW').textContent=formatMin(soll*tage);
 
-  // Heute
+  // Heute (nur aktives Profil)
   const today=todayStr(); let todayMin=0;
-  data.entries.filter(e=>e.date===today).forEach(e=>todayMin+=calcWorkMin(e)||0);
+  data.entries.filter(e=>e.date===today&&(e.category||'job')===pid).forEach(e=>todayMin+=calcWorkMin(e)||0);
   if (a&&!a.end&&a.date===today){
     let el=Math.max(0,Math.round((new Date()-parseDateTime(a.date,a.start))/60000)-(a.breakMin||0));
     if(a.paused&&a.pauseStarted) el=Math.max(0,el-Math.round((new Date()-new Date(a.pauseStarted))/60000));
     todayMin+=el;
   }
   document.getElementById('mHeute').textContent=formatMin(todayMin);
-  const pH=Math.min(100,Math.round(todayMin/soll*100));
+  const pH=soll>0?Math.min(100,Math.round(todayMin/soll*100)):0;
   const pfH=document.getElementById('progHeute');
   pfH.style.width=pH+'%'; pfH.style.background=pH>=100?'var(--accent)':'var(--primary)';
 
-  // Woche
-  const wocheMin=getWeekDates(0).reduce((s,d)=>s+data.entries.filter(e=>e.date===d&&e.end).reduce((a,e)=>a+(calcWorkMin(e)||0),0),0);
+  // Woche (nur aktives Profil)
+  const wocheMin=getWeekDates(0).reduce((s,d)=>s+data.entries.filter(e=>e.date===d&&e.end&&(e.category||'job')===pid).reduce((a,e)=>a+(calcWorkMin(e)||0),0),0);
   document.getElementById('mWoche').textContent=formatMin(wocheMin);
-  document.getElementById('progWoche').style.width=Math.min(100,Math.round(wocheMin/(soll*tage)*100))+'%';
+  document.getElementById('progWoche').style.width=(soll>0&&tage>0)?Math.min(100,Math.round(wocheMin/(soll*tage)*100))+'%':'0%';
 
-  // Saldo (inkl. Startwert)
+  // Saldo (inkl. Startwert, nur aktives Profil)
   let totalSaldo=data.settings.stundenkontoStart||0;
-  [...new Set(data.entries.filter(e=>e.end).map(e=>e.date))].sort().forEach(d=>{
-    const dm=data.entries.filter(e=>e.date===d&&e.end).reduce((s,e)=>s+(calcWorkMin(e)||0),0);
+  [...new Set(data.entries.filter(e=>e.end&&(e.category||'job')===pid).map(e=>e.date))].sort().forEach(d=>{
+    const dm=data.entries.filter(e=>e.date===d&&e.end&&(e.category||'job')===pid).reduce((s,e)=>s+(calcWorkMin(e)||0),0);
     totalSaldo+=isWeekend(d)?dm:dm-soll;
   });
   const se=document.getElementById('mSaldo');
@@ -1425,7 +1508,9 @@ function renderTable() {
   const isFiltered = activeFilter !== 'all' || filterSearch !== '';
   const weekNavHeader = document.getElementById('weekNavHeader');
   const filterSummary = document.getElementById('filterSummary');
-  const soll = data.settings.sollMin;
+  const _tpid=activeProfileId();
+  const _tprofCat=getCategories().find(c=>c.id===_tpid)||getCategories()[0];
+  const soll=_tprofCat?(_tprofCat.sollMin||0):(data.settings.sollMin||480);
   const today = todayStr();
   const vacTypeList = ['Urlaub','Krank','Feiertag','Sonderurlaub'];
   const isVacFilter = vacTypeList.includes(activeFilter);
@@ -1444,7 +1529,8 @@ function renderTable() {
           });
       });
     } else {
-      data.entries.filter(e=>e.end).sort((a,b)=>a.date.localeCompare(b.date)).forEach(e => {
+      const _pid=activeProfileId();
+      data.entries.filter(e=>e.end&&(e.category||'job')===_pid).sort((a,b)=>a.date.localeCompare(b.date)).forEach(e => {
         const locMatch = activeFilter === 'all' || e.location === activeFilter;
         const textMatch = !filterSearch ||
           e.date.includes(filterSearch) ||
@@ -1509,7 +1595,8 @@ function renderTable() {
   const rows=[];
   wd.forEach(d=>{
     const dw=new Date(d).getDay(), we=isWeekend(d);
-    const dayE=data.entries.filter(e=>e.date===d);
+    const _wpid=activeProfileId();
+    const dayE=data.entries.filter(e=>e.date===d&&(e.category||'job')===_wpid);
     const isPast=d<today, isFuture=d>today;
     const dd=`<span class="wd-badge">${WD_SHORT[dw]}</span>${new Date(d).getDate()}.${new Date(d).getMonth()+1}.`;
     if (we) return;
@@ -1697,10 +1784,100 @@ function toggleBurger() {
   const open = document.getElementById('burgerPanel').classList.contains('open');
   document.getElementById('burgerPanel').classList.toggle('open', !open);
   document.getElementById('burgerOverlay').classList.toggle('open', !open);
+  if (!open) renderBurgerProfiles();
 }
 function closeBurger() {
   document.getElementById('burgerPanel').classList.remove('open');
   document.getElementById('burgerOverlay').classList.remove('open');
+}
+
+// ══════════════════════════════════════════
+//  BURGER PROFILE MANAGEMENT
+// ══════════════════════════════════════════
+function renderBurgerProfiles() {
+  const el = document.getElementById('burgerProfileList'); if (!el) return;
+  const active = activeProfileId();
+  el.innerHTML = getCategories().map(c =>
+    `<div style="display:flex;align-items:center;gap:2px;padding:0 6px">
+      <button class="burger-profile-row${c.id===active?' active':''}" onclick="switchBurgerProfile('${c.id}')">
+        <span class="burger-profile-icon" style="background:${c.color}22;color:${c.color}">${c.icon}</span>
+        <span class="burger-profile-name">${c.label}</span>
+        <span class="burger-profile-check">${c.id===active?'✓':''}</span>
+      </button>
+      <button class="bpe-btn" onclick="openProfileEdit('${c.id}')" title="Bearbeiten">✎</button>
+    </div>`
+  ).join('');
+}
+function switchBurgerProfile(id) {
+  selectActiveProfile(id);
+  closeBurger();
+}
+
+// ══════════════════════════════════════════
+//  PROFILE EDIT MODAL
+// ══════════════════════════════════════════
+let _editingProfileId = null;
+const PROFILE_COLORS = ['#6366f1','#10b981','#f59e0b','#ef4444','#3b82f6','#8b5cf6','#ec4899','#6b7280'];
+
+function openProfileEdit(id) {
+  _editingProfileId = id;
+  const profiles = getCategories();
+  const cat = id ? profiles.find(c=>c.id===id) : null;
+  document.getElementById('peMTitle').textContent = cat ? '✎ Profil bearbeiten' : '＋ Neues Profil';
+  document.getElementById('peIcon').value = cat ? cat.icon : '📌';
+  document.getElementById('peName').value = cat ? cat.label : '';
+  const sollM = cat ? (cat.sollMin||0) : 480;
+  document.getElementById('peSollH').value = Math.floor(sollM/60);
+  document.getElementById('peSollM').value = sollM%60;
+  document.getElementById('peTage').value = cat ? (cat.tageProWoche!=null?cat.tageProWoche:5) : 5;
+  // Color swatches
+  const selColor = cat ? cat.color : PROFILE_COLORS[0];
+  document.getElementById('peColorSwatches').innerHTML = PROFILE_COLORS.map(c =>
+    `<div class="color-swatch${c===selColor?' sel':''}" style="background:${c}" data-color="${c}" onclick="selectProfileColor('${c}')"></div>`
+  ).join('');
+  // Delete button: only when editing AND more than 1 profile
+  const delBtn = document.getElementById('peDeleteBtn');
+  delBtn.style.display = (id && profiles.length > 1) ? '' : 'none';
+  openModal('modal-profile-edit');
+}
+function selectProfileColor(c) {
+  document.querySelectorAll('#peColorSwatches .color-swatch').forEach(s => s.classList.toggle('sel', s.dataset.color === c));
+}
+function saveProfileEdit() {
+  const icon = (document.getElementById('peIcon').value.trim() || '📌').slice(0,2);
+  const label = document.getElementById('peName').value.trim();
+  if (!label) { toast('Bitte einen Namen eingeben', 'error'); return; }
+  const sh = parseInt(document.getElementById('peSollH').value)||0;
+  const sm = parseInt(document.getElementById('peSollM').value)||0;
+  const tage = Math.max(0,Math.min(7,parseInt(document.getElementById('peTage').value)||5));
+  const selSwatch = document.querySelector('#peColorSwatches .color-swatch.sel');
+  const color = selSwatch ? selSwatch.dataset.color : PROFILE_COLORS[0];
+  const profiles = getCategories();
+  if (_editingProfileId) {
+    const idx = profiles.findIndex(c=>c.id===_editingProfileId);
+    if (idx >= 0) profiles[idx] = {...profiles[idx], label, icon, color, sollMin:sh*60+sm, tageProWoche:tage};
+  } else {
+    const newId = 'p_'+Date.now();
+    profiles.push({id:newId, label, icon, color, sollMin:sh*60+sm, tageProWoche:tage});
+  }
+  data.settings.categories = profiles;
+  saveData(); closeModal('modal-profile-edit'); renderBurgerProfiles(); render();
+  toast('Profil gespeichert ✓', 'success');
+}
+function deleteActiveProfile() {
+  if (!_editingProfileId) return;
+  const profiles = getCategories();
+  if (profiles.length <= 1) { toast('Mindestens ein Profil erforderlich', 'error'); return; }
+  if (!confirm('Profil wirklich löschen?\nDie Einträge bleiben erhalten.')) return;
+  const idx = profiles.findIndex(c=>c.id===_editingProfileId);
+  if (idx >= 0) profiles.splice(idx,1);
+  if (data.settings.activeProfile === _editingProfileId) {
+    data.settings.activeProfile = profiles[0].id;
+    selectCategory(profiles[0].id);
+  }
+  data.settings.categories = profiles;
+  saveData(); closeModal('modal-profile-edit'); renderBurgerProfiles(); render();
+  toast('Profil gelöscht', 'success');
 }
 
 // ══════════════════════════════════════════
@@ -2063,7 +2240,8 @@ function destroyChart(id){if(_charts[id]){_charts[id].destroy();delete _charts[i
 //  RENDER DASHBOARD
 // ══════════════════════════════════════════
 function renderDashboard() {
-  const completed=data.entries.filter(e=>e.end).sort((a,b)=>a.date.localeCompare(b.date));
+  const _dpid=activeProfileId();
+  const completed=data.entries.filter(e=>e.end&&(e.category||'job')===_dpid).sort((a,b)=>a.date.localeCompare(b.date));
   const empty=document.getElementById('dashEmpty'),content=document.getElementById('dashContent');
   if(!completed.length&&!(data.vacations||[]).length){empty.style.display='block';content.style.display='none';return;}
   empty.style.display='none';content.style.display='block';
@@ -2073,7 +2251,10 @@ function renderDashboard() {
     return;
   }
 
-  const cc=getCC(),soll=data.settings.sollMin,today=todayStr(),yr=today.slice(0,4);
+  const cc=getCC();
+  const _dashCat=getCategories().find(c=>c.id===_dpid)||getCategories()[0];
+  const soll=_dashCat?(_dashCat.sollMin||0):(data.settings.sollMin||480);
+  const today=todayStr(),yr=today.slice(0,4);
   const byDate={};
   completed.forEach(e=>{if(!byDate[e.date])byDate[e.date]={min:0,breakMin:0};byDate[e.date].min+=calcWorkMin(e)||0;byDate[e.date].breakMin+=e.breakMin||0;});
   const dates=Object.keys(byDate).sort();
