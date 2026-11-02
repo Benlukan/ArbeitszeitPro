@@ -1917,6 +1917,12 @@ function deleteActiveProfile() {
 // ══════════════════════════════════════════
 //  MONATSEXPORT
 // ══════════════════════════════════════════
+function fmtHM(min) {
+  if (min == null || min === '') return '0:00';
+  const m = Math.round(min);
+  const abs = Math.abs(m);
+  return (m < 0 ? '-' : '') + Math.floor(abs / 60) + ':' + pad2(abs % 60);
+}
 function openExportModal() {
   const pid = activeProfileId();
   const cat = getCategories().find(c => c.id === pid) || getCategories()[0];
