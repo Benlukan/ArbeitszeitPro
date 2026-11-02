@@ -28,7 +28,7 @@ jobs:
         run: npm ci
 
       - name: Sync Capacitor assets
-        run: npx cap copy android
+        run: npx cap sync android
 
       - name: Decode keystore
         run: |
