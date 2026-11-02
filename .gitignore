@@ -1,0 +1,22 @@
+# Node
+node_modules/
+
+# Android build artifacts
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+android/app/release/
+*.apk
+*.aab
+
+# Signing (never committen)
+*.jks
+*.keystore
+
+# Capacitor
+dist/
+
+# Misc
+.DS_Store
+*.log
